@@ -12,6 +12,7 @@ keywords = ["sqlite", "sqlcipher", "ffi"]
 categories = ["external-ffi-bindings"]
 
 [features]
+recovery = ["bundled-sqlcipher"]
 default = ["min_sqlite_version_3_14_0"]
 bundled = ["cc", "bundled_bindings"]
 bundled-windows = ["cc", "bundled_bindings"]

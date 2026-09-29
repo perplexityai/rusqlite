@@ -360,6 +360,13 @@ mod build_bundled {
         }
         println!("cargo:rerun-if-env-changed=LIBSQLITE3_FLAGS");
 
+        if cfg!(feature = "recovery") {
+            println!("cargo:rerun-if-changed=recover");
+            cfg.define("SQLITE_ENABLE_DBPAGE_VTAB", None)
+                .include(lib_name)
+                .file("recover/sqlite3recover.c")
+                .file("recover/dbdata.c");
+        }
         cfg.compile(lib_name);
 
         println!("cargo:lib_dir={out_dir}");

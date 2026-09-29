@@ -38,3 +38,8 @@ impl Default for sqlite3_vtab_cursor {
         unsafe { mem::zeroed() }
     }
 }
+
+#[cfg(feature = "recovery")]
+mod recovery;
+#[cfg(feature = "recovery")]
+pub use recovery::*;
