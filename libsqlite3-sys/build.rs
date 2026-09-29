@@ -97,6 +97,71 @@ mod build_bundled {
 
     use super::{is_compiler, win_target};
 
+    fn add_windows_sdk_case_shims(cfg: &mut cc::Build, out_dir: &str) {
+        if !win_target() || !is_compiler("msvc") {
+            return;
+        }
+
+        let shim_dir = Path::new(out_dir).join("windows-sdk-case-shims");
+        std::fs::create_dir_all(&shim_dir)
+            .expect("failed to create Windows SDK case shim directory");
+
+        let probe = shim_dir.join("case-sensitivity-probe");
+        let probe_alias = shim_dir.join("CASE-SENSITIVITY-PROBE");
+        std::fs::write(&probe, "").expect("failed to write case sensitivity probe");
+        let case_sensitive = !probe_alias.exists();
+        let _ = std::fs::remove_file(&probe);
+        if !case_sensitive {
+            return;
+        }
+
+        let write_shim = |alias: &str, directive: String| {
+            std::fs::write(shim_dir.join(alias), directive)
+                .expect("failed to write Windows SDK case shim header");
+        };
+
+        write_shim(
+            "DriverSpecs.h",
+            "#pragma once\n#include <driverspecs.h>\n".to_string(),
+        );
+        write_shim(
+            "SpecStrings.h",
+            "#pragma once\n#include <specstrings.h>\n".to_string(),
+        );
+
+        let cflags = env::var("CFLAGS").unwrap_or_default();
+        let mut parts = cflags.split_whitespace();
+        while let Some(part) = parts.next() {
+            if part != "/imsvc" {
+                continue;
+            }
+            let Some(include_dir) = parts.next() else {
+                break;
+            };
+            let Ok(entries) = std::fs::read_dir(include_dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                if !entry.path().is_file() {
+                    continue;
+                }
+                let file_name = entry.file_name();
+                let Some(real) = file_name.to_str() else {
+                    continue;
+                };
+                let lower = real.to_ascii_lowercase();
+                if lower != real {
+                    write_shim(
+                        &lower,
+                        format!("#pragma once\n#include \"{}\"\n", entry.path().display()),
+                    );
+                }
+            }
+        }
+
+        cfg.include(shim_dir);
+    }
+
     pub fn main(out_dir: &str, out_path: &Path) {
         let lib_name = super::lib_name();
 
@@ -114,10 +179,14 @@ mod build_bundled {
         {
             super::copy_bindings(lib_name, "bindgen_bundled_version", out_path);
         }
-        println!("cargo:include={}/{lib_name}", env!("CARGO_MANIFEST_DIR"));
+        println!(
+            "cargo:include={}/{lib_name}",
+            env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set")
+        );
         println!("cargo:rerun-if-changed={lib_name}/sqlite3.c");
         println!("cargo:rerun-if-changed=sqlite3/wasm32-wasi-vfs.c");
         let mut cfg = cc::Build::new();
+        add_windows_sdk_case_shims(&mut cfg, out_dir);
         cfg.file(format!("{lib_name}/sqlite3.c"))
             .flag("-DSQLITE_CORE")
             .flag("-DSQLITE_DEFAULT_FOREIGN_KEYS=1")
@@ -204,7 +273,7 @@ mod build_bundled {
                 // openssl-sys
             } else if use_openssl {
                 cfg.include(inc_dir.to_string_lossy().as_ref());
-                let lib_name = if is_windows { "libcrypto" } else { "crypto" };
+                let lib_name = "crypto";
                 println!("cargo:rustc-link-lib=dylib={}", lib_name);
                 for lib_dir_item in lib_dir.iter() {
                     println!("cargo:rustc-link-search={}", lib_dir_item.to_string_lossy());
