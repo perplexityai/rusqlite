@@ -2,6 +2,7 @@
 
 use crate::sqlite3;
 
+pub const SQLITE_RECOVER_LOST_AND_FOUND: u32 = 1;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct sqlite3_recover {
@@ -19,6 +20,13 @@ extern "C" {
         >,
         pCtx: *mut ::std::os::raw::c_void,
     ) -> *mut sqlite3_recover;
+}
+extern "C" {
+    pub fn sqlite3_recover_config(
+        arg1: *mut sqlite3_recover,
+        op: ::std::os::raw::c_int,
+        pArg: *mut ::std::os::raw::c_void,
+    ) -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn sqlite3_recover_run(arg1: *mut sqlite3_recover) -> ::std::os::raw::c_int;
